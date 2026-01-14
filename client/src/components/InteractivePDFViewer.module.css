@@ -41,26 +41,60 @@
 }
 
 .pdfWrapper {
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
-    background: white;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    background: transparent;
+    display: flex;
+    justify-content: center;
 }
 
 .pageContainer {
     position: relative;
     display: inline-block;
+    line-height: 0;
+    margin: 0 auto;
+}
+
+/* Ensure react-pdf internal wrapper doesn't add space */
+:global(.react-pdf__Page) {
+    margin: 0 !important;
+    padding: 0 !important;
+    display: inline-block !important;
+}
+
+.pdfPage {
+    display: inline-block;
+    line-height: 0;
+}
+
+/* Ensure React-PDF page renders correctly */
+.pdfPage canvas {
+    display: block;
+    /* max-width is omitted to ensure the container always matches the canvas resolution for precise percentage mapping */
 }
 
 .mappedArea {
     position: absolute;
     cursor: pointer;
-    background: rgba(255, 255, 0, 0.0);
-    /* Transparent by default */
-    transition: background 0.2s, box-shadow 0.2s;
-    /* Optional: Show border on hover */
+    background: rgba(74, 144, 226, 0.05);
+    border: 1px solid rgba(74, 144, 226, 0.15);
+    transition: all 0.2s ease;
+    z-index: 100;
+    overflow: hidden;
 }
 
 .mappedArea:hover {
-    background: rgba(255, 255, 0, 0.1);
-    /* Highlight on hover */
-    box-shadow: 0 0 0 2px rgba(255, 200, 0, 0.5);
+    background: rgba(74, 144, 226, 0.2);
+    border: 1.5px solid #4a90e2;
+    box-shadow: 0 0 12px rgba(74, 144, 226, 0.5);
+}
+
+.areaSnippet {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    opacity: 0.9;
+    /* Slightly blend with PDF content for a premium look */
 }

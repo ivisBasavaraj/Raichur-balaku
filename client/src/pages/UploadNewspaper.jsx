@@ -13,27 +13,45 @@ const UploadNewspaper = () => {
 
     const submitHandler = async (e) => {
         e.preventDefault();
-        const formData = new FormData();
-        formData.append('title', title);
-        formData.append('description', description);
-        formData.append('date', date);
-        formData.append('file', file);
+
+        if (!file) {
+            alert('Please select a file');
+            return;
+        }
 
         setUploading(true);
 
-        try {
-            await axios.post('/api/admin/newspaper/upload', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
-            });
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onloadend = async () => {
+            try {
+                const pdfData = reader.result; // This is the Base64 string
+
+                await axios.post('/api/admin/newspaper/upload', {
+                    title,
+                    description,
+                    date,
+                    pdfData
+                }, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+
+                setUploading(false);
+                navigate('/admin/dashboard');
+            } catch (error) {
+                console.error("Upload failed", error);
+                setUploading(false);
+                alert('Upload failed: ' + (error.response?.data?.message || error.message));
+            }
+        };
+
+        reader.onerror = () => {
+            console.error('File reading failed');
             setUploading(false);
-            navigate('/admin/dashboard');
-        } catch (error) {
-            console.error(error);
-            setUploading(false);
-            alert('Upload failed. Try again.');
-        }
+            alert('Failed to read file');
+        };
     };
 
     return (

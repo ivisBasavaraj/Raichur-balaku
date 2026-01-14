@@ -5,37 +5,38 @@ import styles from './InteractivePDFViewer.module.css';
 // Worker src should be set once in the app, but safe to set here if needed, or in App.jsx
 // 'pdfjs-dist/build/pdf.worker.min.mjs'
 
-const InteractivePDFViewer = ({ pdfUrl, mappedAreas, onAreaClick, maxPages }) => {
-    const [numPages, setNumPages] = useState(null);
-    const [pageNumber, setPageNumber] = useState(1);
-    const [scale, setScale] = useState(1.0);
-    const pdfWrapperRef = useRef(null);
+const InteractivePDFViewer = ({
+    pdfUrl,
+    mappedAreas,
+    onAreaClick,
+    pageNumber = 1,
+    scale = 1.0,
+    onDocumentLoadSuccess
+}) => {
 
-    function onDocumentLoadSuccess({ numPages }) {
-        setNumPages(maxPages ? Math.min(numPages, maxPages) : numPages);
+    function internalOnLoadSuccess({ numPages }) {
+        if (onDocumentLoadSuccess) {
+            onDocumentLoadSuccess({ numPages });
+        }
     }
 
     // Filter areas for current page
-    const currentAreas = mappedAreas.filter(area => area.pageNumber === pageNumber);
+    const currentAreas = mappedAreas ? mappedAreas.filter(area => Number(area.pageNumber) === Number(pageNumber)) : [];
+
+    useEffect(() => {
+        console.log(`Page ${pageNumber}: Showing ${currentAreas.length} areas out of ${mappedAreas?.length || 0}`);
+    }, [pageNumber, mappedAreas, currentAreas.length]);
 
     return (
         <div className={styles.viewerContainer}>
-            <div className={styles.controls}>
-                <button disabled={pageNumber <= 1} onClick={() => setPageNumber(prev => prev - 1)}>Prev</button>
-                <span>Page {pageNumber} of {numPages}</span>
-                <button disabled={pageNumber >= numPages} onClick={() => setPageNumber(prev => prev + 1)}>Next</button>
-                <div className={styles.zoomControls}>
-                    <button onClick={() => setScale(s => Math.max(0.5, s - 0.1))}>-</button>
-                    <span>{Math.round(scale * 100)}%</span>
-                    <button onClick={() => setScale(s => Math.min(2.0, s + 0.1))}>+</button>
-                </div>
-            </div>
+            {/* Controls moved to parent */}
 
-            <div className={styles.pdfWrapper} ref={pdfWrapperRef}>
+            <div className={styles.pdfWrapper}>
                 <Document
                     file={pdfUrl}
-                    onLoadSuccess={onDocumentLoadSuccess}
+                    onLoadSuccess={internalOnLoadSuccess}
                     className={styles.document}
+                    loading={<div style={{ color: 'white' }}>Loading PDF...</div>}
                 >
                     <div className={styles.pageContainer}>
                         <Page
@@ -43,22 +44,47 @@ const InteractivePDFViewer = ({ pdfUrl, mappedAreas, onAreaClick, maxPages }) =>
                             scale={scale}
                             renderTextLayer={false}
                             renderAnnotationLayer={false}
+                            renderMode="canvas"
+                            className={styles.pdfPage}
                         />
                         {/* Overlay Mapped Areas */}
-                        {currentAreas.map((area, index) => (
-                            <div
-                                key={index}
-                                className={styles.mappedArea}
-                                style={{
-                                    left: `${area.coordinates.x}%`,
-                                    top: `${area.coordinates.y}%`,
-                                    width: `${area.coordinates.width}%`,
-                                    height: `${area.coordinates.height}%`
-                                }}
-                                onClick={() => onAreaClick(area)}
-                                title={area.headline}
-                            />
-                        ))}
+                        {currentAreas.map((area, index) => {
+                            if (area.extractedImageUrl) {
+                                console.log(`Applying area "${area.headline}" at ${area.coordinates.x}% , ${area.coordinates.y}%`);
+                            }
+                            return (
+                                <div
+                                    key={index}
+                                    className={styles.mappedArea}
+                                    style={{
+                                        left: 0,
+                                        top: 0,
+                                        width: `${area.coordinates.width}%`,
+                                        height: `${area.coordinates.height}%`,
+                                        transform: `translate(${area.coordinates.x / (area.coordinates.width / 100)}%, ${area.coordinates.y / (area.coordinates.height / 100)}%)`,
+                                        /* Actually translate(x, y) with % is relative to the element itself. 
+                                           We want relative to parent. 
+                                           Using left/top % is standard for 'relative to parent'.
+                                           Let's stick to left/top but remove transition for initial placement 
+                                           and add precision. */
+                                        left: `${Number(area.coordinates.x).toFixed(4)}%`,
+                                        top: `${Number(area.coordinates.y).toFixed(4)}%`,
+                                        zIndex: 100 + index
+                                    }}
+                                    onClick={() => onAreaClick(area)}
+                                    title={area.headline}
+                                >
+                                    {area.extractedImageUrl && (
+                                        <img
+                                            src={area.extractedImageUrl}
+                                            alt=""
+                                            className={styles.areaSnippet}
+                                            style={{ width: '100%', height: '100%', objectFit: 'fill' }}
+                                        />
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 </Document>
             </div>

@@ -29,6 +29,7 @@ const PDFMapper = () => {
 
     const canvasRef = useRef(null);
     const fabricCanvasRef = useRef(null);
+    const pdfCanvasRef = useRef(null);
     const [activeRect, setActiveRect] = useState(null);
 
     // Form state
@@ -55,130 +56,234 @@ const PDFMapper = () => {
         if (!canvasRef.current || !newspaper) return;
 
         // Dispose old canvas if exists
-        if (fabricCanvasRef.current) {
-            fabricCanvasRef.current.dispose();
+        const initCanvas = async () => {
+            if (fabricCanvasRef.current) {
+                await fabricCanvasRef.current.dispose();
+                fabricCanvasRef.current = null;
+            }
+
+            // Create new canvas
+            // We need to wait for PDF page to render to know dimensions, 
+            // but we can init with 0 and strict sizing later.
+            // For now, let's assume standard interaction.
+
+            const canvas = new Canvas(canvasRef.current, {
+                selection: false,
+                width: 0,
+                height: 0
+            });
+
+            fabricCanvasRef.current = canvas;
+
+            // Add Drawing Mode logic
+            let isDown = false;
+            let origX = 0;
+            let origY = 0;
+            let rect = null;
+
+            canvas.on('mouse:down', function (o) {
+                // If we clicked on an active object, let fabric handle it (e.g. built-in drag/resize)
+                if (canvas.getActiveObject()) return;
+
+                if (activeRect) {
+                    // If there is an active rect but we clicked elsewhere, maybe deselect or start new?
+                    // For this simple mapper, let's enforce finishing one before starting another
+                    return;
+                }
+
+                isDown = true;
+                var pointer = canvas.getScenePoint(o.e); // v6: getScenePoint or getPointer
+                origX = pointer.x;
+                origY = pointer.y;
+
+                rect = new Rect({
+                    left: origX,
+                    top: origY,
+                    originX: 'left',
+                    originY: 'top',
+                    width: pointer.x - origX,
+                    height: pointer.y - origY,
+                    fill: 'rgba(74, 144, 226, 0.3)',
+                    stroke: '#4a90e2',
+                    strokeWidth: 2,
+                    transparentCorners: false,
+                    cornerColor: 'white',
+                    cornerStrokeColor: '#4a90e2',
+                    borderColor: '#4a90e2',
+                    cornerSize: 10,
+                    padding: 5
+                });
+
+                canvas.add(rect);
+                canvas.setActiveObject(rect);
+            });
+
+            canvas.on('mouse:move', function (o) {
+                if (!isDown) return;
+                var pointer = canvas.getScenePoint(o.e);
+
+                if (origX > pointer.x) {
+                    rect.set({ left: Math.abs(pointer.x) });
+                }
+                if (origY > pointer.y) {
+                    rect.set({ top: Math.abs(pointer.y) });
+                }
+
+                rect.set({ width: Math.abs(origX - pointer.x) });
+                rect.set({ height: Math.abs(origY - pointer.y) });
+
+                canvas.requestRenderAll();
+            });
+
+            canvas.on('mouse:up', function (o) {
+                if (isDown) {
+                    isDown = false;
+                    if (rect) {
+                        rect.setCoords();
+                        setActiveRect(rect);
+                    }
+                }
+            });
+
+            // Handle object selection events if needed
+            canvas.on('selection:created', (e) => {
+                if (e.selected && e.selected.length > 0) {
+                    setActiveRect(e.selected[0]);
+                }
+            });
+
+            canvas.on('selection:cleared', () => {
+                // Do not clear activeRect state immediately if we want to keep the form open?
+                // Or maybe we do. Let's keep it simple: no selection = no form.
+                // setActiveRect(null); 
+            });
         }
 
-        const canvas = new Canvas(canvasRef.current, {
-            width: 800 * scale, // Approximate A4 ratio or dynamic
-            height: 1100 * scale,
-            selection: false
-        });
-
-        fabricCanvasRef.current = canvas;
-
-        // Add Drawing Mode logic
-        let isDown, origX, origY, rect;
-
-        canvas.on('mouse:down', function (o) {
-            if (activeRect) return; // If already editing a rect, don't draw new one
-
-            isDown = true;
-            var pointer = canvas.getPointer(o.e);
-            origX = pointer.x;
-            origY = pointer.y;
-
-            rect = new Rect({
-                left: origX,
-                top: origY,
-                originX: 'left',
-                originY: 'top',
-                width: pointer.x - origX,
-                height: pointer.y - origY,
-                angle: 0,
-                fill: 'rgba(74, 144, 226, 0.3)',
-                stroke: '#4a90e2',
-                strokeWidth: 2,
-                transparentCorners: false
-            });
-            canvas.add(rect);
-        });
-
-        canvas.on('mouse:move', function (o) {
-            if (!isDown) return;
-            var pointer = canvas.getPointer(o.e);
-
-            if (origX > pointer.x) {
-                rect.set({ left: Math.abs(pointer.x) });
-            }
-            if (origY > pointer.y) {
-                rect.set({ top: Math.abs(pointer.y) });
-            }
-
-            rect.set({ width: Math.abs(origX - pointer.x) });
-            rect.set({ height: Math.abs(origY - pointer.y) });
-
-            canvas.renderAll();
-        });
-
-        canvas.on('mouse:up', function (o) {
-            isDown = false;
-            if (rect) {
-                rect.setCoords();
-                setActiveRect(rect);
-                // Disable drawing new rects until this one is saved/cancelled? 
-                // Alternatively, allow multiple but select the active one.
-                // For simplicity, let's treat the last drawn as active.
-
-                // We should also allow modifiying existing mapped areas from DB?
-                // For now, let's just focus on adding new ones.
-            }
-        });
+        initCanvas();
 
         return () => {
             if (fabricCanvasRef.current) {
                 fabricCanvasRef.current.dispose();
+                fabricCanvasRef.current = null;
             }
         };
-    }, [pageNumber, scale, newspaper]);
+    }, [pageNumber, newspaper]);
 
     function onDocumentLoadSuccess({ numPages }) {
         setNumPages(numPages);
     }
 
-    const saveMappedArea = async () => {
-        if (!activeRect) return;
-
-        // Calculate percentage coordinates
-        const canvasWidth = fabricCanvasRef.current.width;
-        const canvasHeight = fabricCanvasRef.current.height;
-
-        const coords = {
-            x: (activeRect.left / canvasWidth) * 100,
-            y: (activeRect.top / canvasHeight) * 100,
-            width: (activeRect.getScaledWidth() / canvasWidth) * 100,
-            height: (activeRect.getScaledHeight() / canvasHeight) * 100
-        };
-
-        const formData = new FormData();
-        formData.append('pageNumber', pageNumber);
-        formData.append('x', coords.x);
-        formData.append('y', coords.y);
-        formData.append('width', coords.width);
-        formData.append('height', coords.height);
-        formData.append('headline', headline);
-        formData.append('category', category);
-        if (newsImage) {
-            formData.append('file', newsImage);
+    const captureSnippet = () => {
+        if (!activeRect || !fabricCanvasRef.current || !pdfCanvasRef.current) {
+            console.error("Capture failed: Missing refs");
+            return null;
         }
 
         try {
-            await axios.post(`/api/admin/newspaper/${id}/map-area`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
+            const pdfCanvas = pdfCanvasRef.current instanceof HTMLCanvasElement
+                ? pdfCanvasRef.current
+                : pdfCanvasRef.current.querySelector('canvas');
 
-            alert('Area mapped successfully!');
-            // Reset form
-            setHeadline('');
-            setCategory('other');
-            setNewsImage(null);
-            fabricCanvasRef.current.remove(activeRect);
-            setActiveRect(null);
+            if (!pdfCanvas) return null;
 
-            // Optionally, refresh/Draw existing areas
-        } catch (error) {
-            console.error(error);
-            alert('Failed to map area');
+            // Get the bounding box of the rectangle in Fabric's coordinate system
+            const rectBounds = activeRect.getBoundingRect();
+
+            // Get scaling factors between the display fabric canvas and the internal PDF canvas
+            const scaleX = pdfCanvas.width / fabricCanvasRef.current.width;
+            const scaleY = pdfCanvas.height / fabricCanvasRef.current.height;
+
+            const cropX = rectBounds.left * scaleX;
+            const cropY = rectBounds.top * scaleY;
+            const cropWidth = rectBounds.width * scaleX;
+            const cropHeight = rectBounds.height * scaleY;
+
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = cropWidth;
+            tempCanvas.height = cropHeight;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            tempCtx.drawImage(
+                pdfCanvas,
+                cropX, cropY, cropWidth, cropHeight,
+                0, 0, cropWidth, cropHeight
+            );
+
+            return tempCanvas.toDataURL('image/jpeg', 0.9);
+        } catch (err) {
+            console.error("Auto-crop execution failed:", err);
+            return null;
+        }
+    };
+
+    const saveMappedArea = async () => {
+        if (!activeRect) return;
+
+        // Get actual current dimensions of the canvas
+        const canvasWidth = fabricCanvasRef.current.width;
+        const canvasHeight = fabricCanvasRef.current.height;
+        const rectBounds = activeRect.getBoundingRect();
+
+        const coords = {
+            x: (rectBounds.left / canvasWidth) * 100,
+            y: (rectBounds.top / canvasHeight) * 100,
+            width: (rectBounds.width / canvasWidth) * 100,
+            height: (rectBounds.height / canvasHeight) * 100
+        };
+
+        const processSave = async (extractedImageData) => {
+            if (!extractedImageData || extractedImageData.length < 100) {
+                alert(`Capture suspicious: Data length is only ${extractedImageData ? extractedImageData.length : 0} bytes. Capture might have failed.`);
+                return;
+            }
+
+            try {
+                const payload = {
+                    pageNumber,
+                    x: coords.x,
+                    y: coords.y,
+                    width: coords.width,
+                    height: coords.height,
+                    headline,
+                    category,
+                    imageData: extractedImageData
+                };
+
+                console.log("Sending mapping payload:", {
+                    ...payload,
+                    imageData: payload.imageData.substring(0, 100) + "..."
+                });
+
+                alert(`DEBUG: Captured data length: ${extractedImageData.length} characters.`);
+
+                await axios.post(`/api/admin/newspaper/${id}/map-area`, payload, {
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                alert(`Area mapped successfully! Snippet size: ${Math.round(extractedImageData.length / 1024)} KB`);
+                setHeadline('');
+                setCategory('other');
+                setNewsImage(null);
+                fabricCanvasRef.current.remove(activeRect);
+                setActiveRect(null);
+            } catch (error) {
+                console.error(error);
+                alert('Failed to map area: ' + (error.response?.data?.message || error.message));
+            }
+        };
+
+        // If manual image exists, use it. Otherwise, AUTO-CROP from the PDF.
+        if (newsImage) {
+            const reader = new FileReader();
+            reader.readAsDataURL(newsImage);
+            reader.onloadend = () => processSave(reader.result);
+        } else {
+            const autoSnippet = captureSnippet();
+            if (autoSnippet) {
+                processSave(autoSnippet);
+            } else {
+                alert("Could not capture snippet. Please upload one manually.");
+            }
         }
     };
 
@@ -207,28 +312,37 @@ const PDFMapper = () => {
                     <Document
                         file={newspaper?.pdfUrl}
                         onLoadSuccess={onDocumentLoadSuccess}
+                        onLoadError={(err) => console.error("PDF Load Error:", err)}
+                        loading={<div style={{ color: '#333' }}>Loading PDF Data...</div>}
                         className={styles.pdfDocument}
                     >
-                        <Page
-                            pageNumber={pageNumber}
-                            scale={scale}
-                            renderTextLayer={false}
-                            renderAnnotationLayer={false}
-                            className={styles.pdfPage}
-                            onLoadSuccess={(page) => {
-                                // Update canvas dimensions to match PDF page render
-                                const viewport = page.getViewport({ scale });
-                                if (fabricCanvasRef.current) {
-                                    fabricCanvasRef.current.setDimensions({
-                                        width: viewport.width,
-                                        height: viewport.height
-                                    });
-                                }
-                            }}
-                        />
-                        {/* Canvas overlay */}
-                        <div className={styles.canvasOverlay}>
-                            <canvas ref={canvasRef} />
+                        <div className={styles.pageWrapper}>
+                            <Page
+                                pageNumber={pageNumber}
+                                scale={scale}
+                                renderTextLayer={false}
+                                renderAnnotationLayer={false}
+                                renderMode="canvas"
+                                inputRef={pdfCanvasRef}
+                                className={styles.pdfPage}
+                                onRenderSuccess={(result) => {
+                                    console.log("PDF Page rendered successfully");
+                                }}
+                                onLoadSuccess={(page) => {
+                                    const viewport = page.getViewport({ scale });
+                                    if (fabricCanvasRef.current) {
+                                        fabricCanvasRef.current.setDimensions({
+                                            width: viewport.width,
+                                            height: viewport.height
+                                        });
+                                        fabricCanvasRef.current.renderAll();
+                                    }
+                                }}
+                            />
+                            {/* Canvas overlay */}
+                            <div className={styles.canvasOverlay}>
+                                <canvas ref={canvasRef} />
+                            </div>
                         </div>
                     </Document>
                 </div>
