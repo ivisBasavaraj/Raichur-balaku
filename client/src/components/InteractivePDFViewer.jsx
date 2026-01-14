@@ -57,16 +57,8 @@ const InteractivePDFViewer = ({
                                     key={index}
                                     className={styles.mappedArea}
                                     style={{
-                                        left: 0,
-                                        top: 0,
                                         width: `${area.coordinates.width}%`,
                                         height: `${area.coordinates.height}%`,
-                                        transform: `translate(${area.coordinates.x / (area.coordinates.width / 100)}%, ${area.coordinates.y / (area.coordinates.height / 100)}%)`,
-                                        /* Actually translate(x, y) with % is relative to the element itself. 
-                                           We want relative to parent. 
-                                           Using left/top % is standard for 'relative to parent'.
-                                           Let's stick to left/top but remove transition for initial placement 
-                                           and add precision. */
                                         left: `${Number(area.coordinates.x).toFixed(4)}%`,
                                         top: `${Number(area.coordinates.y).toFixed(4)}%`,
                                         zIndex: 100 + index

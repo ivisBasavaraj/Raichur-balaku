@@ -47,9 +47,17 @@
     justify-content: center;
 }
 
+.document {
+    display: block;
+    margin: 0;
+    padding: 0;
+}
+
 .pageContainer {
     position: relative;
     display: inline-block;
+    width: fit-content;
+    height: fit-content;
     line-height: 0;
     margin: 0 auto;
 }
@@ -75,17 +83,29 @@
 .mappedArea {
     position: absolute;
     cursor: pointer;
-    background: rgba(74, 144, 226, 0.05);
-    border: 1px solid rgba(74, 144, 226, 0.15);
-    transition: all 0.2s ease;
+    background: transparent;
+    border: 1px solid transparent;
+    transition: all 0.1s ease-in-out;
     z-index: 100;
     overflow: hidden;
+    pointer-events: all;
 }
 
 .mappedArea:hover {
-    background: rgba(74, 144, 226, 0.2);
-    border: 1.5px solid #4a90e2;
-    box-shadow: 0 0 12px rgba(74, 144, 226, 0.5);
+    background: rgba(74, 144, 226, 0.15);
+    border: 1px solid #4a90e2;
+    box-shadow: 0 0 15px rgba(74, 144, 226, 0.4);
+}
+
+/* When there is NO image snippet, show a subtle hint that it's clickable */
+.mappedArea:not(:has(img)) {
+    background: rgba(74, 144, 226, 0.03);
+    border: 1px dashed rgba(74, 144, 226, 0.1);
+}
+
+.mappedArea:not(:has(img)):hover {
+    background: rgba(74, 144, 226, 0.15);
+    border: 1px solid #4a90e2;
 }
 
 .areaSnippet {
@@ -95,6 +115,7 @@
     width: 100%;
     height: 100%;
     pointer-events: none;
-    opacity: 0.9;
-    /* Slightly blend with PDF content for a premium look */
+    opacity: 1;
+    /* Keep article snippets crisp */
+    object-fit: fill;
 }

@@ -32,8 +32,11 @@ const HomePage = () => {
                     <div key={paper._id} className={styles.card}>
                         <Link to={`/newspaper/${paper._id}`}>
                             <div className={styles.preview}>
-                                {/* PDF Preview or generic icon */}
-                                <span>{paper.title}</span>
+                                {paper.coverImageUrl ? (
+                                    <img src={paper.coverImageUrl} alt={paper.title} />
+                                ) : (
+                                    <span>{paper.title}</span>
+                                )}
                             </div>
                             <div className={styles.info}>
                                 <h3>{paper.title}</h3>

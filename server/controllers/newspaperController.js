@@ -6,7 +6,7 @@ const fs = require('fs');
 // @access  Private/Admin
 const uploadNewspaper = async (req, res) => {
     try {
-        const { title, description, date, pdfData } = req.body;
+        const { title, description, date, pdfData, coverData } = req.body;
 
         if (!pdfData) {
             return res.status(400).json({ message: 'No PDF data provided' });
@@ -16,7 +16,8 @@ const uploadNewspaper = async (req, res) => {
             title,
             description,
             date,
-            pdfUrl: pdfData, // Storing Base64 string directly in pdfUrl
+            pdfUrl: pdfData,
+            coverImageUrl: coverData || '', // Store thumbnail as Base64
             uploadedBy: req.user._id,
             mappedAreas: [],
         });
